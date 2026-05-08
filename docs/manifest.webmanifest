@@ -1,0 +1,17 @@
+{
+  "name": "Little Voice Stories",
+  "short_name": "Voice Stories",
+  "description": "Turn a kid's drawing into a bedtime story narrated with a local parent voice profile.",
+  "start_url": "/little-voice-stories/",
+  "scope": "/little-voice-stories/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#172554",
+  "icons": [
+    {
+      "src": "/little-voice-stories/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
