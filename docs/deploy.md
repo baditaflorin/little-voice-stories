@@ -17,6 +17,15 @@ git commit -m "feat: update published app"
 git push origin main
 ```
 
+## Local Pages Preview
+
+```bash
+make build
+make pages-preview
+```
+
+Preview URL: http://127.0.0.1:4317/little-voice-stories/
+
 ## Rollback
 
 Revert the commit that changed `docs/`, then push `main`.

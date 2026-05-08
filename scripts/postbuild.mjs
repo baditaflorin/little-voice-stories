@@ -7,7 +7,7 @@ const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
 
 function gitValue(command, fallback) {
   try {
-    return execSync(command, { encoding: 'utf8' }).trim();
+    return execSync(command, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   } catch {
     return fallback;
   }

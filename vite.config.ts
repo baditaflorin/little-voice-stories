@@ -1,7 +1,7 @@
 import react from '@vitejs/plugin-react';
 import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as {
   version: string;
@@ -9,7 +9,7 @@ const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 
 
 function gitValue(command: string, fallback: string) {
   try {
-    return execSync(command, { encoding: 'utf8' }).trim();
+    return execSync(command, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   } catch {
     return fallback;
   }
@@ -26,7 +26,8 @@ export default defineConfig({
     outDir: 'docs',
     assetsDir: 'assets',
     emptyOutDir: false,
-    sourcemap: true,
+    chunkSizeWarningLimit: 6500,
+    sourcemap: false,
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -42,5 +43,10 @@ export default defineConfig({
     __GIT_COMMIT__: JSON.stringify(gitCommit),
     __GIT_BRANCH__: JSON.stringify(gitBranch),
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
   },
 });

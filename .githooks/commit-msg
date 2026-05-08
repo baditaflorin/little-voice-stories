@@ -1,0 +1,15 @@
+#!/usr/bin/env sh
+set -eu
+
+msg_file="$1"
+msg="$(head -n 1 "$msg_file")"
+
+case "$msg" in
+  feat:\ *|fix:\ *|docs:\ *|chore:\ *|refactor:\ *|test:\ *|ops:\ *|data:\ *|style:\ *|perf:\ *|build:\ *|ci:\ *)
+    exit 0
+    ;;
+  *)
+    echo "Commit message must use Conventional Commits, e.g. feat: add story generator"
+    exit 1
+    ;;
+esac
