@@ -1,21 +1,21 @@
 # Phase 3 Codebase Audit
 
-Measurement only. No fixes in this document.
+Measurement only. Baseline notes are preserved, with the current Phase 3 state summarized below.
 
 ## DRY Violations
 
-- No obvious large duplicate logic blocks were found in `src/` beyond minor UI event-handling repetition inside [ProjectWorkspace.tsx](/Users/live/Documents/Codex/2026-05-08/implemment-the-following-2-kid-drawing/src/app/ProjectWorkspace.tsx:1).
-- Repeated toast/error/status wiring inside [ProjectWorkspace.tsx](/Users/live/Documents/Codex/2026-05-08/implemment-the-following-2-kid-drawing/src/app/ProjectWorkspace.tsx:65) is a small consolidation opportunity, not yet a hard violation.
+- Before: no large duplicate blocks in `src/`, but the portable-session concepts were spread across app state and storage assumptions.
+- After: `projectState.ts` and `sessionTransfer.ts` are the single sources of truth for portable session shape, migration, share snapshots, and file naming.
 
 ## SOLID Violations
 
-- [ProjectWorkspace.tsx](/Users/live/Documents/Codex/2026-05-08/implemment-the-following-2-kid-drawing/src/app/ProjectWorkspace.tsx:65) is a god module. It owns app shell, navigation, drawing IO, story controls, voice controls, debug state, and persistence orchestration.
-- [storage.ts](/Users/live/Documents/Codex/2026-05-08/implemment-the-following-2-kid-drawing/src/features/library/storage.ts:1) only handles one persisted shape and has no migration policy yet.
+- Before: [ProjectWorkspace.tsx](/Users/live/Documents/Codex/2026-05-08/implemment-the-following-2-kid-drawing/src/app/ProjectWorkspace.tsx:65) was the main god module, and [storage.ts](/Users/live/Documents/Codex/2026-05-08/implemment-the-following-2-kid-drawing/src/features/library/storage.ts:1) had no migration policy.
+- After: storage now persists a validated portable project with migration support. `ProjectWorkspace.tsx` is still the biggest remaining module and stays the main Phase 4 split candidate.
 
 ## Dead Code
 
-- [App.tsx](/Users/live/Documents/Codex/2026-05-08/implemment-the-following-2-kid-drawing/src/App.tsx:1) wraps the app in `QueryClientProvider`, but no query hooks are used anywhere in `src/`.
-- `@tanstack/react-query` appears to be an unused runtime dependency.
+- Before: [App.tsx](/Users/live/Documents/Codex/2026-05-08/implemment-the-following-2-kid-drawing/src/App.tsx:1) wrapped the app in `QueryClientProvider`, and `@tanstack/react-query` was unused.
+- After: the wrapper and dependency were removed.
 
 ## TODO / FIXME / XXX / HACK Count
 
@@ -24,15 +24,15 @@ Measurement only. No fixes in this document.
 ## Type Safety Holes
 
 - No `any` or `@ts-ignore` was found in source/tests.
-- Boundary validation is still incomplete for imported or shared state because there is currently no import/share feature.
+- Imported state, shared state, and persisted state now all cross explicit Zod boundaries.
 
 ## Inconsistent Patterns
 
-- Debug visibility is controlled by URL query string, while most other user-facing state is in React state and IndexedDB.
-- Error handling is mostly consistent through toasts and domain errors, but some feature requirements are still only surfaced after a failed click.
+- Debug visibility now has a first-class Settings toggle alongside the legacy query-string path.
+- Error handling for import/share/copy/save flows is now consistently surfaced through toasts and domain errors.
 
 ## Test Coverage Holes
 
-- No test currently covers exporting or importing a session because those flows do not exist yet.
-- No test covers paste/clipboard input because that flow does not exist yet.
-- No test covers stranger-style recovery from reset, reload, or share links.
+- Session export/import round-trip is now covered in Playwright and unit tests.
+- Share snapshot, project migration, and portable session parsing are covered in unit tests.
+- Remaining gap: direct clipboard-read behavior still depends on browser permissions and is not fully automated in e2e.

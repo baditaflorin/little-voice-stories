@@ -25,19 +25,28 @@ make build
 make pages-preview
 ```
 
-## What V1 Does
+## What The App Does Today
 
 - Digitizes a kid drawing in-browser with canvas color, edge, and coverage analysis.
+- Accepts drawings from upload, drag-drop, paste, clipboard read, and a built-in sample.
 - Turns the drawing into a named character seed with palette, mood, gift, and bedtime challenge.
 - Generates a full bedtime story locally with a deterministic story engine.
 - Offers an optional WebGPU/WebLLM local AI story path after explicit user action.
 - Records around 30 seconds of parent audio and creates a local voice profile.
 - Narrates the story with browser SpeechSynthesis tuned by the parent voice profile.
-- Saves the current project in IndexedDB and works as an installable PWA.
-- Shows version and commit in the live GitHub Pages UI.
+- Saves the current project in IndexedDB and can export or re-import the full session as JSON.
+- Copies story text or JSON, creates a story share link, and prints a clean bedtime-friendly page.
+- Exposes session settings for autosave, learned subject corrections, debug state, and story defaults.
+- Works as an installable PWA and shows the published version and commit in the live UI.
 
-V1 intentionally uses a privacy-preserving parent voice imprint instead of claiming exact neural
+The app intentionally uses a privacy-preserving parent voice imprint instead of claiming exact neural
 voice cloning. The app has no backend and no analytics.
+
+## Limitations
+
+- Voice input is microphone-only in `0.3.x`; importing external audio files is still out of scope.
+- URL-based drawing import is intentionally not built because GitHub Pages cannot solve arbitrary image CORS safely.
+- The optional Local AI path needs a modern browser with WebGPU. Template story generation remains available everywhere else.
 
 ## Architecture
 

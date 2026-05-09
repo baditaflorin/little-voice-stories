@@ -7,35 +7,31 @@ Status key:
 - `red`: missing, broken, or not wired
 - `gray`: intentionally out of scope for Mode A v1
 
-| Pathway                         | Status before Phase 3 | Notes                                                                                      |
-| ------------------------------- | --------------------- | ------------------------------------------------------------------------------------------ |
-| Single image upload             | `green`               | File picker accepts one drawing and runs analysis end to end.                              |
-| Drag and drop image             | `green`               | First dropped image is analyzed. No per-file feedback.                                     |
-| Multi-file drop or picker       | `red`                 | Extra files are ignored; no queue, progress, or partial success.                           |
-| Mobile picker                   | `yellow`              | Native file picker works, but there is no camera capture hint or mobile-specific guidance. |
-| Paste image from clipboard      | `red`                 | No paste listener, no explicit clipboard path, no fallback message.                        |
-| Clipboard read button           | `red`                 | No read-permission flow exists.                                                            |
-| URL input                       | `red`                 | No URL input or honest CORS guidance exists.                                               |
-| Restored autosave               | `green`               | IndexedDB restore works for current project shape.                                         |
-| Import saved state file         | `red`                 | No import route exists.                                                                    |
-| Deep link restore               | `red`                 | No URL-hash or query-state restore path exists.                                            |
-| Demo/sample drawing             | `green`               | Sample loader works.                                                                       |
-| Replace existing drawing        | `yellow`              | New upload replaces current drawing, but the UI does not explain overwrite behavior.       |
-| Voice recording from microphone | `green`               | MediaRecorder path works with recovery on permission denial.                               |
-| Import external audio           | `gray`                | Explicitly out of scope in Phase 2; v1 supports mic-only parent samples.                   |
-| Folder input                    | `gray`                | Not appropriate for this single-story workflow.                                            |
+| Pathway                         | Status before Phase 3 | Status after Phase 3 | Notes                                                                                                |
+| ------------------------------- | --------------------- | -------------------- | ---------------------------------------------------------------------------------------------------- |
+| Single image upload             | `green`               | `green`              | File picker accepts drawings and routes straight into analysis.                                      |
+| Drag and drop image             | `green`               | `green`              | Dropped image files analyze end to end.                                                              |
+| Multi-file drop or picker       | `red`                 | `green`              | The first usable image is analyzed and the app explains when extra files were left unused.           |
+| Mobile picker                   | `yellow`              | `green`              | The image input now includes a camera capture hint and still accepts Files/Photos selections.        |
+| Paste image from clipboard      | `red`                 | `green`              | Window paste handling now accepts pasted screenshots or copied drawings.                             |
+| Clipboard read button           | `red`                 | `green`              | Explicit read flow exists with permission fallback guidance.                                         |
+| URL input                       | `red`                 | `gray`               | Still intentionally out of scope on GitHub Pages; README limitations now explain the CORS tradeoff.  |
+| Restored autosave               | `green`               | `green`              | IndexedDB restore still works for the current project shape.                                         |
+| Import saved state file         | `red`                 | `green`              | Portable session JSON imports restore drawing, story, voice profile, settings, and activity history. |
+| Deep link restore               | `red`                 | `green`              | Story share links restore a lightweight session through the URL hash.                                |
+| Demo/sample drawing             | `green`               | `green`              | Sample loader still works and remains equivalent to user-supplied paths.                             |
+| Replace existing drawing        | `yellow`              | `green`              | The app now warns when a replacement drawing will overwrite the current one.                         |
+| Voice recording from microphone | `green`               | `green`              | MediaRecorder path still works with recovery on permission denial.                                   |
+| Import external audio           | `gray`                | `gray`               | Still intentionally out of scope; this release keeps the parent voice sample microphone-only.        |
+| Folder input                    | `gray`                | `gray`               | Still intentionally out of scope for a single-session bedtime workflow.                              |
 
-## Baseline
+## Before vs After
 
-- Green: 5
-- Yellow: 2
-- Red: 6
-- Gray: 2
+- Before: Green 5 / Yellow 2 / Red 6 / Gray 2
+- After: Green 12 / Yellow 0 / Red 0 / Gray 3
 
-## Highest-impact input gaps
+## Result
 
-1. No paste or clipboard path for parents working from screenshots or copied drawings.
-2. No import path for a previously saved bedtime session.
-3. No multi-file handling or per-file feedback when users try more than one drawing.
-4. No deep-link restore or share entry point.
-5. No in-app explanation for why URL import and external audio import are out of scope.
+Phase 3 cleared every claimed input path except the ones deliberately kept out of scope for Mode A.
+The app can now accept real drawings from the pathways a stranger is most likely to try first:
+upload, drag-drop, paste, clipboard read, sample load, autosave restore, session import, and share-link restore.

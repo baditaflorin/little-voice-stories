@@ -24,3 +24,4 @@ No analytics are shipped in v1.
 ## Clearing Data
 
 Use the in-app reset control or clear site data for https://baditaflorin.github.io/little-voice-stories/ in the browser.
+If you want to keep a bedtime session before resetting, export the session JSON first and import it later.

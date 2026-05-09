@@ -7,31 +7,26 @@ Status key:
 - `red`: missing, broken, or not wired
 - `gray`: intentionally out of scope for Mode A v1
 
-| Pathway                     | Status before Phase 3 | Notes                                                                     |
-| --------------------------- | --------------------- | ------------------------------------------------------------------------- |
-| Story visible in UI         | `green`               | Story can be read and edited in the browser.                              |
-| Browser narration playback  | `green`               | SpeechSynthesis path works once story and voice profile exist.            |
-| Copy story to clipboard     | `red`                 | No copy action exists.                                                    |
-| Download story as text      | `red`                 | No text export exists.                                                    |
-| Download project state file | `red`                 | No state export exists.                                                   |
-| Re-import exported state    | `red`                 | No import route exists.                                                   |
-| Shareable URL               | `red`                 | No deep-link export exists.                                               |
-| Printable bedtime view      | `red`                 | No print action or print-specific layout exists.                          |
-| Copy structured JSON        | `red`                 | No JSON export or clipboard path exists.                                  |
-| Version and commit visible  | `green`               | Visible in the header and published bundle.                               |
-| Debug/provenance inspection | `yellow`              | `?debug=1` works, but there is no discoverable UI path.                   |
-| Screenshot-friendly output  | `yellow`              | The story is visible, but there is no dedicated print or story-card mode. |
+| Pathway                     | Status before Phase 3 | Status after Phase 3 | Notes                                                                                             |
+| --------------------------- | --------------------- | -------------------- | ------------------------------------------------------------------------------------------------- |
+| Story visible in UI         | `green`               | `green`              | Story remains editable and readable in the browser.                                               |
+| Browser narration playback  | `green`               | `green`              | SpeechSynthesis playback still works after story and voice setup.                                 |
+| Copy story to clipboard     | `red`                 | `green`              | Story copy now exists and falls back when the browser clipboard API is unavailable.               |
+| Download story as text      | `red`                 | `green`              | Story downloads as a `.txt` artifact with a stable name.                                          |
+| Download project state file | `red`                 | `green`              | Full session JSON export exists.                                                                  |
+| Re-import exported state    | `red`                 | `green`              | Exported session files restore in the app end to end.                                             |
+| Shareable URL               | `red`                 | `green`              | Story share links now serialize a lightweight story snapshot into the URL hash.                   |
+| Printable bedtime view      | `red`                 | `green`              | Print action strips chrome and produces a clean bedtime-reading view.                             |
+| Copy structured JSON        | `red`                 | `green`              | Session JSON can be copied directly with the same fallback strategy as story copy.                |
+| Version and commit visible  | `green`               | `green`              | Visible in the header and published bundle.                                                       |
+| Debug/provenance inspection | `yellow`              | `green`              | Debug details are now discoverable through Settings as well as `?debug=1`.                        |
+| Screenshot-friendly output  | `yellow`              | `green`              | Story output now has cleaner print styling and fewer layout distractions for screenshots or PDFs. |
 
-## Baseline
+## Before vs After
 
-- Green: 3
-- Yellow: 2
-- Red: 7
+- Before: Green 3 / Yellow 2 / Red 7
+- After: Green 12 / Yellow 0 / Red 0
 
-## Highest-impact output gaps
+## Result
 
-1. A parent cannot take their work out of the app except by reading it onscreen.
-2. There is no full-state export/import round-trip.
-3. There is no quick copy path for the story text.
-4. There is no share or print mode for bedtime handoff.
-5. Debug/provenance exists but is effectively hidden.
+Phase 3 closed the biggest handoff gap: a parent can now copy, download, print, re-import, or share the work they made in the browser without relying on the autosave alone.
