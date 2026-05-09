@@ -1,9 +1,6 @@
 import { openDB } from 'idb';
 import { z } from 'zod';
-
-import { drawingAnalysisSchema } from '../drawing/drawingAnalyzer';
-import { characterProfileSchema, generatedStorySchema } from '../story/storyEngine';
-import { voiceProfileSchema } from '../voice/voiceAnalysis';
+import { migrateProjectState, portableProjectSchema, type PortableProject } from './projectState';
 
 const DB_NAME = 'little-voice-stories';
 const STORE_NAME = 'projects';
@@ -11,11 +8,7 @@ const CURRENT_PROJECT_ID = 'current';
 
 export const persistedProjectSchema = z.object({
   id: z.literal(CURRENT_PROJECT_ID),
-  updatedAt: z.string(),
-  drawing: drawingAnalysisSchema.optional(),
-  character: characterProfileSchema.optional(),
-  story: generatedStorySchema.optional(),
-  voiceProfile: voiceProfileSchema.optional(),
+  project: portableProjectSchema,
 });
 
 export type PersistedProject = z.infer<typeof persistedProjectSchema>;
@@ -26,15 +19,21 @@ export async function loadCurrentProject(): Promise<PersistedProject | undefined
   if (!value) {
     return undefined;
   }
-  return persistedProjectSchema.parse(value);
+  const current = persistedProjectSchema.safeParse(value);
+  if (current.success) {
+    return current.data;
+  }
+  return persistedProjectSchema.parse({
+    id: CURRENT_PROJECT_ID,
+    project: migrateProjectState(value),
+  });
 }
 
-export async function saveCurrentProject(project: Omit<PersistedProject, 'id' | 'updatedAt'>) {
+export async function saveCurrentProject(project: PortableProject) {
   const db = await openProjectDb();
   await db.put(STORE_NAME, {
     id: CURRENT_PROJECT_ID,
-    updatedAt: new Date().toISOString(),
-    ...project,
+    project: portableProjectSchema.parse(project),
   });
 }
 

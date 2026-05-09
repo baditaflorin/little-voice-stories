@@ -1,19 +1,28 @@
 import {
+  Clipboard,
   BookOpen,
+  BrainCircuit,
   Brush,
   CircleStop,
+  Copy,
+  Download,
   Eraser,
+  FileJson,
+  FileUp,
   GitBranch,
   HeartHandshake,
+  Link2,
   Loader2,
   Mic,
   Pause,
   Play,
+  Printer,
+  Settings2,
   Sparkles,
-  SquarePen,
+  Upload,
   Wand2,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { type ChangeEvent, useEffect, useEffectEvent, useRef, useState } from 'react';
 
 import {
   analyzeAudioBlob,
@@ -30,6 +39,22 @@ import {
   loadCurrentProject,
   saveCurrentProject,
 } from '../features/library/storage';
+import {
+  createEmptyProject,
+  defaultAppSettings,
+  type ActivityEvent,
+  type AppSettings,
+  type PortableProject,
+} from '../features/library/projectState';
+import {
+  parsePortableProject,
+  parseShareSnapshot,
+  projectFromShareSnapshot,
+  serializePortableProject,
+  serializeShareSnapshot,
+  sessionDownloadName,
+  storyTextDownloadName,
+} from '../features/library/sessionTransfer';
 import {
   defaultCharacterProfile,
   generateTemplateStory,
@@ -48,22 +73,16 @@ type Toast = {
   message: string;
   tone: 'info' | 'success' | 'error';
 };
-
-type ActivityEvent = {
-  id: number;
-  at: string;
-  label: string;
-};
-
-const steps: Array<{ id: StepId; label: string }> = [
+const steps: Array<{ id: StepId | 'settings'; label: string }> = [
   { id: 'drawing', label: 'Drawing' },
   { id: 'character', label: 'Character' },
   { id: 'story', label: 'Story' },
   { id: 'voice', label: 'Voice' },
+  { id: 'settings', label: 'Settings' },
 ];
 
 export function ProjectWorkspace() {
-  const [activeStep, setActiveStep] = useState<StepId>('drawing');
+  const [activeStep, setActiveStep] = useState<StepId | 'settings'>('drawing');
   const [drawing, setDrawing] = useState<DrawingAnalysis>();
   const [character, setCharacter] = useState<CharacterProfile>(defaultCharacterProfile());
   const [story, setStory] = useState<GeneratedStory>();
@@ -72,39 +91,80 @@ export function ProjectWorkspace() {
   const [hasLoaded, setHasLoaded] = useState(false);
   const [activity, setActivity] = useState<ActivityEvent[]>([]);
   const [subjectCorrections, setSubjectCorrections] = useState<Record<string, string>>({});
-  const debugEnabled = new URLSearchParams(window.location.search).get('debug') === '1';
+  const [settings, setSettings] = useState<AppSettings>(defaultAppSettings());
+  const importRef = useRef<HTMLInputElement>(null);
+  const skipNextAutosaveRef = useRef(false);
+  const debugEnabled =
+    settings.showDebugPanel || new URLSearchParams(window.location.search).get('debug') === '1';
 
   useEffect(() => {
-    loadCurrentProject()
-      .then((project) => {
-        if (project?.drawing) {
-          setDrawing(project.drawing);
+    let active = true;
+
+    async function restoreProject() {
+      try {
+        const shared = parseShareSnapshot(window.location.hash);
+        if (shared) {
+          if (!active) {
+            return;
+          }
+          applyProject(projectFromShareSnapshot(shared));
+          pushToast('Shared story loaded.', 'success');
+          return;
         }
-        if (project?.character) {
-          setCharacter(project.character);
+      } catch (error) {
+        if (active) {
+          pushToast(formatError(error, 'Shared story could not be restored.'), 'error');
         }
-        if (project?.story) {
-          setStory(project.story);
+      }
+
+      try {
+        const record = await loadCurrentProject();
+        if (active && record?.project) {
+          applyProject(record.project);
         }
-        if (project?.voiceProfile) {
-          setVoiceProfile(project.voiceProfile);
+      } catch {
+        if (active) {
+          pushToast('Saved project could not be restored.', 'error');
         }
-      })
-      .catch(() => pushToast('Saved project could not be restored.', 'error'))
-      .finally(() => setHasLoaded(true));
+      } finally {
+        if (active) {
+          setHasLoaded(true);
+        }
+      }
+    }
+
+    void restoreProject();
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
     if (!hasLoaded) {
       return;
     }
+    if (!settings.autosaveEnabled) {
+      return;
+    }
+    if (skipNextAutosaveRef.current) {
+      skipNextAutosaveRef.current = false;
+      return;
+    }
     const handle = window.setTimeout(() => {
-      saveCurrentProject({ drawing, character, story, voiceProfile }).catch(() =>
-        pushToast('Local save failed in this browser.', 'error'),
-      );
+      saveCurrentProject({
+        ...createEmptyProject(new Date().toISOString()),
+        updatedAt: new Date().toISOString(),
+        drawing,
+        character,
+        story,
+        voiceProfile,
+        activity,
+        subjectCorrections,
+        settings,
+      }).catch(() => pushToast('Local save failed in this browser.', 'error'));
     }, 400);
     return () => window.clearTimeout(handle);
-  }, [character, drawing, hasLoaded, story, voiceProfile]);
+  }, [activity, character, drawing, hasLoaded, settings, story, subjectCorrections, voiceProfile]);
 
   function pushToast(message: string, tone: Toast['tone'] = 'info') {
     const id = Date.now();
@@ -127,15 +187,103 @@ export function ProjectWorkspace() {
     );
   }
 
+  function applyProject(project: PortableProject) {
+    setDrawing(project.drawing);
+    setCharacter(project.character);
+    setStory(project.story);
+    setVoiceProfile(project.voiceProfile);
+    setActivity(project.activity);
+    setSubjectCorrections(project.subjectCorrections);
+    setSettings(project.settings);
+  }
+
+  function buildProjectState(): PortableProject {
+    return {
+      ...createEmptyProject(new Date().toISOString()),
+      updatedAt: new Date().toISOString(),
+      drawing,
+      character,
+      story,
+      voiceProfile,
+      activity,
+      subjectCorrections,
+      settings,
+    };
+  }
+
   async function resetProject() {
+    const confirmed = window.confirm(
+      'Reset the local bedtime session? Export the session first if you want a backup.',
+    );
+    if (!confirmed) {
+      return;
+    }
     await clearCurrentProject();
-    setDrawing(undefined);
-    setCharacter(defaultCharacterProfile());
-    setStory(undefined);
-    setVoiceProfile(undefined);
-    setActivity([]);
+    skipNextAutosaveRef.current = true;
+    applyProject(createEmptyProject());
+    window.history.replaceState({}, document.title, window.location.pathname);
     setActiveStep('drawing');
     pushToast('Local project cleared.', 'success');
+  }
+
+  async function importSession(file: File) {
+    try {
+      const project = parsePortableProject(await file.text());
+      applyProject(project);
+      setActiveStep(project.story ? 'story' : project.drawing ? 'character' : 'drawing');
+      recordActivity(`Imported session ${file.name}`);
+      pushToast('Session imported.', 'success');
+    } catch (error) {
+      pushToast(formatError(error, 'Session import failed.'), 'error');
+    }
+  }
+
+  async function handleImportSelection(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (file) {
+      await importSession(file);
+    }
+    event.target.value = '';
+  }
+
+  async function exportSession() {
+    const project = buildProjectState();
+    downloadTextFile(
+      serializePortableProject(project),
+      sessionDownloadName(project),
+      'application/json',
+    );
+    recordActivity('Exported session JSON');
+    pushToast('Session JSON exported.', 'success');
+  }
+
+  async function copyProjectJson() {
+    try {
+      await navigator.clipboard.writeText(serializePortableProject(buildProjectState()));
+      pushToast('Session JSON copied.', 'success');
+    } catch {
+      pushToast('Session JSON copy is not available in this browser.', 'error');
+    }
+  }
+
+  async function shareStoryLink() {
+    try {
+      const url = serializeShareSnapshot(buildProjectState());
+      await navigator.clipboard.writeText(url);
+      recordActivity('Copied share link');
+      pushToast('Share link copied.', 'success');
+    } catch (error) {
+      pushToast(formatError(error, 'Share link failed.'), 'error');
+    }
+  }
+
+  function printStory() {
+    if (!story) {
+      pushToast('Create a story first, then print it.', 'error');
+      return;
+    }
+    recordActivity('Opened print view');
+    window.print();
   }
 
   return (
@@ -175,6 +323,25 @@ export function ProjectWorkspace() {
           </p>
         </section>
 
+        <input
+          ref={importRef}
+          className="visually-hidden"
+          type="file"
+          accept="application/json,.json"
+          onChange={(event) => void handleImportSelection(event)}
+        />
+
+        <SessionToolbar
+          hasStory={Boolean(story)}
+          hasDrawing={Boolean(drawing)}
+          onImport={() => importRef.current?.click()}
+          onExport={() => void exportSession()}
+          onCopyJson={() => void copyProjectJson()}
+          onShare={() => void shareStoryLink()}
+          onPrint={printStory}
+          onSettings={() => setActiveStep('settings')}
+        />
+
         <StepTabs activeStep={activeStep} onChange={setActiveStep} />
 
         <section className="tool-surface" aria-live="polite">
@@ -182,7 +349,9 @@ export function ProjectWorkspace() {
             <DrawingStep
               drawing={drawing}
               onDrawing={(analysis) => {
-                const learnedName = subjectCorrections[analysis.subject.label];
+                const learnedName = settings.rememberSubjectCorrections
+                  ? subjectCorrections[analysis.subject.label]
+                  : undefined;
                 const inferredName = learnedName ?? toTitleCase(analysis.subject.label);
                 setDrawing(analysis);
                 setCharacter((current) => ({
@@ -211,7 +380,7 @@ export function ProjectWorkspace() {
               character={character}
               onCharacter={setCharacter}
               onSubjectNameCorrection={(subject, name) => {
-                if (name.trim()) {
+                if (settings.rememberSubjectCorrections && name.trim()) {
                   setSubjectCorrections((current) => ({ ...current, [subject]: name.trim() }));
                 }
               }}
@@ -224,11 +393,18 @@ export function ProjectWorkspace() {
               drawing={drawing}
               character={character}
               story={story}
+              settings={settings}
               onStory={(nextStory) => {
                 setStory(nextStory);
                 if (story?.id !== nextStory.id) {
                   recordActivity(`Story generated from ${nextStory.provenance.subject}`);
                 }
+              }}
+              onCopyStory={(text) => void copyText(text, 'Story copied.', pushToast)}
+              onDownloadStory={(text) => {
+                downloadTextFile(text, storyTextDownloadName(buildProjectState()), 'text/plain');
+                recordActivity('Downloaded story text');
+                pushToast('Story text downloaded.', 'success');
               }}
               onToast={pushToast}
               onNext={() => setActiveStep('voice')}
@@ -242,6 +418,19 @@ export function ProjectWorkspace() {
               onVoiceProfile={(profile) => {
                 setVoiceProfile(profile);
                 recordActivity(`Voice profile quality ${profile.quality.label}`);
+              }}
+              onToast={pushToast}
+            />
+          )}
+
+          {activeStep === 'settings' && (
+            <SettingsStep
+              settings={settings}
+              onSettings={(nextSettings) => {
+                setSettings(nextSettings);
+                if (!nextSettings.rememberSubjectCorrections) {
+                  setSubjectCorrections({});
+                }
               }}
               onToast={pushToast}
             />
@@ -272,7 +461,13 @@ export function ProjectWorkspace() {
   );
 }
 
-function StepTabs({ activeStep, onChange }: { activeStep: StepId; onChange: (step: StepId) => void }) {
+function StepTabs({
+  activeStep,
+  onChange,
+}: {
+  activeStep: StepId | 'settings';
+  onChange: (step: StepId | 'settings') => void;
+}) {
   return (
     <div className="step-tabs" role="tablist" aria-label="Story creation steps">
       {steps.map((step, index) => (
@@ -289,6 +484,84 @@ function StepTabs({ activeStep, onChange }: { activeStep: StepId; onChange: (ste
         </button>
       ))}
     </div>
+  );
+}
+
+function SessionToolbar({
+  hasStory,
+  hasDrawing,
+  onImport,
+  onExport,
+  onCopyJson,
+  onShare,
+  onPrint,
+  onSettings,
+}: {
+  hasStory: boolean;
+  hasDrawing: boolean;
+  onImport: () => void;
+  onExport: () => void;
+  onCopyJson: () => void;
+  onShare: () => void;
+  onPrint: () => void;
+  onSettings: () => void;
+}) {
+  return (
+    <section className="session-toolbar" aria-label="Session tools">
+      <button className="secondary-button" type="button" onClick={onImport}>
+        <FileUp size={18} />
+        Import session
+      </button>
+      <button
+        className="secondary-button"
+        type="button"
+        onClick={onExport}
+        title={
+          hasDrawing
+            ? 'Download the full bedtime session as JSON.'
+            : 'Export a session after loading a drawing.'
+        }
+      >
+        <Download size={18} />
+        Export session
+      </button>
+      <button
+        className="secondary-button"
+        type="button"
+        onClick={onCopyJson}
+        title={hasDrawing ? 'Copy the full session JSON.' : 'Copy session JSON after loading a drawing.'}
+      >
+        <FileJson size={18} />
+        Copy JSON
+      </button>
+      <button
+        className="secondary-button"
+        type="button"
+        onClick={onShare}
+        disabled={!hasStory}
+        title="Create a share link once the current story is ready."
+      >
+        <Link2 size={18} />
+        Share link
+      </button>
+      <button
+        className="secondary-button"
+        type="button"
+        onClick={onPrint}
+        disabled={!hasStory}
+        title="Print the current story once it is ready."
+      >
+        <Printer size={18} />
+        Print story
+      </button>
+      <button className="secondary-button" type="button" onClick={onSettings}>
+        <Settings2 size={18} />
+        Settings
+      </button>
+      <p className="session-toolbar__hint">
+        Export saves the full local session. Share and print unlock after a story is ready.
+      </p>
+    </section>
   );
 }
 
@@ -313,12 +586,38 @@ function DrawingStep({
     setIsAnalyzing(true);
     try {
       onDrawing(await analyzeDrawingFile(file, { signal: controller.signal }));
+      return true;
     } catch (error) {
       onToast(formatError(error, 'Drawing analysis failed.'), isDomainError(error) ? 'info' : 'error');
+      return false;
     } finally {
       if (abortRef.current === controller) {
         abortRef.current = null;
         setIsAnalyzing(false);
+      }
+    }
+  }
+
+  async function analyzeFiles(files: File[]) {
+    const usable = files.filter((file) => file.type.startsWith('image/'));
+    if (usable.length === 0) {
+      onToast('No supported image files were found in that selection.', 'error');
+      return;
+    }
+
+    for (const [index, file] of usable.entries()) {
+      if (drawing) {
+        onToast(`Replacing the current drawing with ${file.name}.`, 'info');
+      }
+      const loaded = await analyze(file);
+      if (loaded) {
+        if (usable.length > 1) {
+          onToast(
+            `Loaded the first usable drawing from ${usable.length} files. ${usable.length - index - 1} left unused.`,
+            'info',
+          );
+        }
+        return;
       }
     }
   }
@@ -330,6 +629,54 @@ function DrawingStep({
       onToast(formatError(error, 'Sample drawing failed.'), 'error');
     }
   }
+
+  async function readClipboardImage() {
+    if (!navigator.clipboard?.read) {
+      onToast('Use Ctrl+V or Cmd+V to paste a drawing in this browser.', 'info');
+      return;
+    }
+
+    try {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const imageType = item.types.find((type) => type.startsWith('image/'));
+        if (!imageType) {
+          continue;
+        }
+        const blob = await item.getType(imageType);
+        const extension = imageType.split('/')[1] || 'png';
+        await analyzeFiles([new File([blob], `clipboard-drawing.${extension}`, { type: imageType })]);
+        return;
+      }
+      onToast('Clipboard did not contain an image.', 'info');
+    } catch {
+      onToast('Clipboard image access was not granted. Try pasting directly.', 'error');
+    }
+  }
+
+  const onPasteImage = useEffectEvent((event: ClipboardEvent) => {
+    const files = Array.from(event.clipboardData?.files ?? []).filter((file) =>
+      file.type.startsWith('image/'),
+    );
+    if (files.length > 0) {
+      event.preventDefault();
+      void analyzeFiles(files);
+    }
+  });
+
+  useEffect(() => {
+    function onPaste(event: ClipboardEvent) {
+      const files = Array.from(event.clipboardData?.files ?? []).filter((file) =>
+        file.type.startsWith('image/'),
+      );
+      if (files.length > 0) {
+        onPasteImage(event);
+      }
+    }
+
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, []);
 
   return (
     <div className="step-grid">
@@ -343,9 +690,9 @@ function DrawingStep({
         onDrop={(event) => {
           event.preventDefault();
           setIsDragging(false);
-          const file = event.dataTransfer.files[0];
-          if (file) {
-            void analyze(file);
+          const files = Array.from(event.dataTransfer.files ?? []);
+          if (files.length > 0) {
+            void analyzeFiles(files);
           }
         }}
       >
@@ -353,25 +700,32 @@ function DrawingStep({
           ref={inputRef}
           className="visually-hidden"
           type="file"
-          accept="image/png,image/jpeg,image/webp,image/svg+xml"
+          accept="image/*"
+          multiple
+          capture="environment"
           onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) {
-              void analyze(file);
+            const files = Array.from(event.target.files ?? []);
+            if (files.length > 0) {
+              void analyzeFiles(files);
             }
+            event.target.value = '';
           }}
         />
         <Brush size={34} />
         <h2>Kid drawing digitizer</h2>
-        <p>Drop a drawing or load the sample character.</p>
+        <p>Upload, drop, paste, or read a drawing from the clipboard.</p>
         <div className="button-row">
           <button className="primary-button" type="button" onClick={() => inputRef.current?.click()}>
-            <SquarePen size={18} />
-            Upload drawing
+            <Upload size={18} />
+            Add drawing
           </button>
           <button className="secondary-button" type="button" onClick={() => void loadSample()}>
             <Sparkles size={18} />
             Use sample
+          </button>
+          <button className="secondary-button" type="button" onClick={() => void readClipboardImage()}>
+            <Clipboard size={18} />
+            Read clipboard
           </button>
         </div>
         {isAnalyzing && (
@@ -557,20 +911,27 @@ function StoryStep({
   drawing,
   character,
   story,
+  settings,
   onStory,
+  onCopyStory,
+  onDownloadStory,
   onToast,
   onNext,
 }: {
   drawing?: DrawingAnalysis;
   character: CharacterProfile;
   story?: GeneratedStory;
+  settings: AppSettings;
   onStory: (story: GeneratedStory) => void;
+  onCopyStory: (text: string) => void;
+  onDownloadStory: (text: string) => void;
   onToast: (message: string, tone?: Toast['tone']) => void;
   onNext: () => void;
 }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState<WebLlmProgress>();
   const canGenerate = Boolean(drawing && character.characterName.trim());
+  const localAiAvailable = 'gpu' in navigator;
 
   function generateLocal() {
     if (!drawing) {
@@ -609,6 +970,12 @@ function StoryStep({
       <div className="story-actions">
         <h2>Bedtime story</h2>
         <p className="muted">{metrics}</p>
+        {!localAiAvailable && (
+          <p className="muted">
+            Local AI needs a recent browser with WebGPU. Template story generation remains fully
+            supported.
+          </p>
+        )}
         {story && (
           <p className="provenance-line">
             Story {story.id} · {story.provenance.subject} ·{' '}
@@ -619,20 +986,58 @@ function StoryStep({
           <button
             className="primary-button"
             type="button"
-            onClick={generateLocal}
-            disabled={!canGenerate}
+            onClick={
+              settings.preferredStoryGenerator === 'local-ai' ? () => void generateLlm() : generateLocal
+            }
+            disabled={
+              !canGenerate || (settings.preferredStoryGenerator === 'local-ai' && !localAiAvailable)
+            }
           >
-            <Wand2 size={18} />
-            Compose story
+            {settings.preferredStoryGenerator === 'local-ai' ? (
+              <BrainCircuit size={18} />
+            ) : (
+              <Wand2 size={18} />
+            )}
+            {settings.preferredStoryGenerator === 'local-ai' ? 'Local AI story' : 'Compose story'}
           </button>
           <button
             className="secondary-button"
             type="button"
-            onClick={() => void generateLlm()}
-            disabled={!canGenerate || isGenerating}
+            onClick={
+              settings.preferredStoryGenerator === 'local-ai' ? generateLocal : () => void generateLlm()
+            }
+            disabled={
+              !canGenerate ||
+              isGenerating ||
+              (settings.preferredStoryGenerator !== 'local-ai' && !localAiAvailable)
+            }
           >
-            {isGenerating ? <Loader2 className="spin" size={18} /> : <Sparkles size={18} />}
-            Local AI
+            {isGenerating ? (
+              <Loader2 className="spin" size={18} />
+            ) : settings.preferredStoryGenerator === 'local-ai' ? (
+              <Wand2 size={18} />
+            ) : (
+              <Sparkles size={18} />
+            )}
+            {settings.preferredStoryGenerator === 'local-ai' ? 'Template story' : 'Local AI'}
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => story && onCopyStory(story.text)}
+            disabled={!story}
+          >
+            <Copy size={18} />
+            Copy story
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => story && onDownloadStory(story.text)}
+            disabled={!story}
+          >
+            <Download size={18} />
+            Download story
           </button>
         </div>
         {progress && (
@@ -675,6 +1080,10 @@ function StoryStep({
               ...story,
               text: event.target.value,
               wordCount: event.target.value.trim().split(/\s+/).filter(Boolean).length,
+              estimatedMinutes: Math.max(
+                3,
+                Math.round(event.target.value.trim().split(/\s+/).filter(Boolean).length / 145),
+              ),
             })
           }
         />
@@ -699,6 +1108,7 @@ function VoiceStep({
   const [spokenChunks, setSpokenChunks] = useState(0);
   const [totalChunks, setTotalChunks] = useState(0);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -786,10 +1196,12 @@ function VoiceStep({
       },
       () => {
         setIsSpeaking(false);
+        setIsPaused(false);
         onToast('Narration finished.', 'success');
       },
       (message) => {
         setIsSpeaking(false);
+        setIsPaused(false);
         onToast(message, 'error');
       },
     );
@@ -798,6 +1210,7 @@ function VoiceStep({
   function stopNarration() {
     narrationRef.current?.cancel();
     setIsSpeaking(false);
+    setIsPaused(false);
   }
 
   const recordingTargetReached = seconds >= 30;
@@ -880,10 +1293,18 @@ function VoiceStep({
               <button
                 className="secondary-button"
                 type="button"
-                onClick={() => window.speechSynthesis.pause()}
+                onClick={() => {
+                  if (isPaused) {
+                    window.speechSynthesis.resume();
+                    setIsPaused(false);
+                    return;
+                  }
+                  window.speechSynthesis.pause();
+                  setIsPaused(true);
+                }}
               >
                 <Pause size={18} />
-                Pause
+                {isPaused ? 'Resume' : 'Pause'}
               </button>
               <button className="danger-button" type="button" onClick={stopNarration}>
                 <CircleStop size={18} />
@@ -903,6 +1324,83 @@ function Metric({ label, value }: { label: string; value: string }) {
     <div>
       <dt>{label}</dt>
       <dd>{value}</dd>
+    </div>
+  );
+}
+
+function SettingsStep({
+  settings,
+  onSettings,
+  onToast,
+}: {
+  settings: AppSettings;
+  onSettings: (settings: AppSettings) => void;
+  onToast: (message: string, tone?: Toast['tone']) => void;
+}) {
+  const update = (patch: Partial<AppSettings>) => onSettings({ ...settings, ...patch });
+
+  return (
+    <div className="settings-grid">
+      <section className="form-block">
+        <h2>Session settings</h2>
+        <label className="toggle-row">
+          <span>Autosave locally</span>
+          <input
+            type="checkbox"
+            checked={settings.autosaveEnabled}
+            onChange={(event) => {
+              update({ autosaveEnabled: event.target.checked });
+              onToast(
+                event.target.checked
+                  ? 'Autosave is back on for this browser.'
+                  : 'Autosave is off. The current session stays in memory until you close the page.',
+                'info',
+              );
+            }}
+          />
+        </label>
+        <label className="toggle-row">
+          <span>Remember subject name corrections</span>
+          <input
+            type="checkbox"
+            checked={settings.rememberSubjectCorrections}
+            onChange={(event) => update({ rememberSubjectCorrections: event.target.checked })}
+          />
+        </label>
+        <label className="toggle-row">
+          <span>Show debug details in the app</span>
+          <input
+            type="checkbox"
+            checked={settings.showDebugPanel}
+            onChange={(event) => update({ showDebugPanel: event.target.checked })}
+          />
+        </label>
+      </section>
+
+      <section className="form-block">
+        <h2>Story defaults</h2>
+        <fieldset>
+          <legend>Preferred generator</legend>
+          <div className="segmented">
+            {(['template', 'local-ai'] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                className={
+                  settings.preferredStoryGenerator === option ? 'segment segment--active' : 'segment'
+                }
+                onClick={() => update({ preferredStoryGenerator: option })}
+              >
+                {option === 'template' ? 'Template' : 'Local AI'}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+        <p className="muted">
+          Template stories always work. Local AI stays optional and only appears as the default when this
+          setting is selected.
+        </p>
+      </section>
     </div>
   );
 }
@@ -964,4 +1462,53 @@ function toTitleCase(value: string) {
     .filter(Boolean)
     .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`)
     .join(' ');
+}
+
+async function copyText(
+  value: string,
+  successMessage: string,
+  onToast: (message: string, tone?: Toast['tone']) => void,
+) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+    } else {
+      copyWithSelectionFallback(value);
+    }
+    onToast(successMessage, 'success');
+  } catch {
+    try {
+      copyWithSelectionFallback(value);
+      onToast(successMessage, 'success');
+    } catch {
+      onToast(
+        'Clipboard access is not available in this browser. Use the download action instead.',
+        'error',
+      );
+    }
+  }
+}
+
+function copyWithSelectionFallback(value: string) {
+  const input = document.createElement('textarea');
+  input.value = value;
+  input.setAttribute('readonly', 'true');
+  input.className = 'visually-hidden';
+  document.body.append(input);
+  input.select();
+  const copied = document.execCommand('copy');
+  input.remove();
+  if (!copied) {
+    throw new Error('Clipboard copy fallback failed.');
+  }
+}
+
+function downloadTextFile(value: string, fileName: string, mimeType: string) {
+  const blob = new Blob([value], { type: `${mimeType};charset=utf-8` });
+  const href = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = href;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(href);
 }

@@ -167,8 +167,22 @@ h2 {
 .step-tabs {
   display: grid;
   gap: 0.5rem;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   margin: 1.5rem 0;
+}
+
+.session-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin: 0 0 1rem;
+}
+
+.session-toolbar__hint {
+  color: var(--muted);
+  flex-basis: 100%;
+  font-size: 0.92rem;
+  margin: 0.1rem 0 0;
 }
 
 .step-tab {
@@ -230,7 +244,8 @@ h2 {
 
 .form-grid,
 .story-layout,
-.voice-layout {
+.voice-layout,
+.settings-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
@@ -461,6 +476,21 @@ textarea {
   width: 100%;
 }
 
+input[type='checkbox'] {
+  accent-color: var(--teal);
+  min-height: 1.1rem;
+  width: 1.1rem;
+}
+
+.toggle-row {
+  align-items: center;
+  border-bottom: 1px solid #edf2f7;
+  color: var(--ink);
+  grid-template-columns: 1fr auto;
+  min-height: 3rem;
+  padding: 0.25rem 0;
+}
+
 textarea {
   line-height: 1.55;
   min-height: 7rem;
@@ -619,7 +649,8 @@ progress {
   .step-grid,
   .form-grid,
   .story-layout,
-  .voice-layout {
+  .voice-layout,
+  .settings-grid {
     grid-template-columns: 1fr;
   }
 
@@ -639,6 +670,41 @@ progress {
 
   .metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media print {
+  .topbar,
+  .step-tabs,
+  .session-toolbar,
+  .story-actions,
+  .voice-recorder,
+  .footer,
+  .toast-region,
+  .debug-panel {
+    display: none !important;
+  }
+
+  .app-shell,
+  .workspace,
+  .tool-surface,
+  .story-layout,
+  .story-editor {
+    background: #fff;
+    box-shadow: none;
+    max-width: none;
+    min-height: auto;
+    padding: 0;
+  }
+
+  .story-editor input,
+  .story-editor textarea {
+    border: 0;
+    padding: 0;
+  }
+
+  .story-editor textarea {
+    min-height: 0;
   }
 }
 

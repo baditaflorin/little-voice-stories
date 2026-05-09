@@ -1,6 +1,6 @@
 {
   "name": "little-voice-stories",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Turn a kid's drawing into a bedtime story narrated in a parent's voice, entirely in the browser.",
@@ -24,7 +24,6 @@
   },
   "dependencies": {
     "@mlc-ai/web-llm": "^0.2.83",
-    "@tanstack/react-query": "^5.100.9",
     "idb": "^8.0.3",
     "lucide-react": "^1.14.0",
     "react": "^19.2.6",
