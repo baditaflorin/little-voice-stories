@@ -64,6 +64,23 @@ Sources:
 - Voice quality gate catches too-short, silent, and noisy recordings in fixture tests.
 - Every inference used in UI has confidence and reasons.
 
+## After Phase 2 Implementation
+
+Fixture contract pass rate: 10/10. The app now either makes the expected useful first guess or produces an actionable domain failure for unsupported inputs.
+
+| Fixture                   | Phase 2 result                                                       |
+| ------------------------- | -------------------------------------------------------------------- |
+| `clean-house-tree`        | Infers house/tree with high confidence and grounds the story in it.  |
+| `photo-shadow-paper`      | Labels drawing photo, flags shadow/crop risk, avoids high certainty. |
+| `toddler-sparse-smiley`   | Keeps smiley face but lowers confidence and suggests adding a note.  |
+| `huge-story-cover`        | Infers story cover and surfaces large-file guidance/cancel path.     |
+| `multipage-art-pdf`       | Rejects PDF with what/why/next-step guidance.                        |
+| `low-contrast-sketch`     | Labels faint drawing, flags sparse/low-contrast issues.              |
+| `dataset-emotion-drawing` | Infers family subject with story hint.                               |
+| `mixed-subject-text`      | Infers mixed family/house/text and asks the user to choose focus.    |
+| `short-noisy-voice`       | Flags too-short, too-quiet, and noisy/thin quality.                  |
+| `long-multispeaker-audio` | Rejects imported public audio with the mic-only v1 policy.           |
+
 ## Out Of Scope
 
 - New backend, auth, sync, cloud AI, or exact neural voice cloning.

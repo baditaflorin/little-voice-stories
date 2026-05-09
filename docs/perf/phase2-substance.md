@@ -24,3 +24,11 @@ The fixture suite records duration for drawing inference and asserts no crash fo
 - Add early file validation before decode.
 - Cache inference by source hash within the browser session.
 - Keep optional WebLLM lazy.
+
+## Latest Local Measurements
+
+- `npm test`: 17 tests passed in about 2 seconds; fixture assertions completed under 100ms in the latest run.
+- `npm run build`: Pages bundle built in under 1 second locally.
+- `npm run smoke`: Playwright happy path passed in about 2 seconds.
+
+The automated fixture run measures inference behavior from committed real-data descriptors. Browser decode/canvas timing still needs binary fixtures with clear licensing before it can be treated as a full end-to-end image-performance benchmark.
