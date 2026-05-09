@@ -1,0 +1,16 @@
+{
+  "id": "mixed-subject-text",
+  "sourceUrl": "https://commons.wikimedia.org/wiki/Category:Drawings_by_children",
+  "fileName": "people-house-text-love-mom.jpg",
+  "mimeType": "image/jpeg",
+  "bytes": 670000,
+  "signals": {
+    "width": 1400,
+    "height": 1000,
+    "inkCoverage": 0.39,
+    "colorfulness": 0.33,
+    "brightness": 0.79,
+    "edgeEnergy": 0.44,
+    "palette": ["#ef4444", "#111827", "#84cc16"]
+  }
+}

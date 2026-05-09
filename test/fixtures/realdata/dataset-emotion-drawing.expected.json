@@ -1,0 +1,7 @@
+{
+  "subject": "family",
+  "sceneType": "character",
+  "minimumConfidence": 0.65,
+  "requiredStoryWords": ["family"],
+  "expectedIssues": []
+}

@@ -1,0 +1,16 @@
+{
+  "id": "clean-house-tree",
+  "sourceUrl": "https://commons.wikimedia.org/wiki/File:A_child%27s_drawing_of_a_house_with_an_apple_tree.jpg",
+  "fileName": "child-drawing-house-apple-tree.jpg",
+  "mimeType": "image/jpeg",
+  "bytes": 420000,
+  "signals": {
+    "width": 1200,
+    "height": 900,
+    "inkCoverage": 0.32,
+    "colorfulness": 0.41,
+    "brightness": 0.82,
+    "edgeEnergy": 0.29,
+    "palette": ["#ef4444", "#16a34a", "#2563eb"]
+  }
+}

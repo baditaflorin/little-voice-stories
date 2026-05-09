@@ -1,0 +1,5 @@
+{
+  "minimumQualityIssues": 2,
+  "expectedIssues": ["too-short", "too-noisy-or-thin"],
+  "maximumQualityScore": 0.55
+}

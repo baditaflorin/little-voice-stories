@@ -1,0 +1,15 @@
+{
+  "id": "rtl-filename",
+  "fileName": "ציור-בית-ילד.png",
+  "mimeType": "image/png",
+  "bytes": 440000,
+  "signals": {
+    "width": 1000,
+    "height": 1000,
+    "inkCoverage": 0.22,
+    "colorfulness": 0.27,
+    "brightness": 0.81,
+    "edgeEnergy": 0.25,
+    "palette": ["#2563eb", "#f97316"]
+  }
+}

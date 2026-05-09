@@ -1,0 +1,7 @@
+{
+  "subject": "drawing photo",
+  "sceneType": "unknown",
+  "minimumConfidence": 0.35,
+  "requiredSuggestions": ["crop", "brighter"],
+  "expectedIssues": ["photo-shadow-risk"]
+}

@@ -1,0 +1,15 @@
+{
+  "id": "empty-image",
+  "fileName": "blank.png",
+  "mimeType": "image/png",
+  "bytes": 1200,
+  "signals": {
+    "width": 800,
+    "height": 600,
+    "inkCoverage": 0,
+    "colorfulness": 0,
+    "brightness": 1,
+    "edgeEnergy": 0,
+    "palette": []
+  }
+}

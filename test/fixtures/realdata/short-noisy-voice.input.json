@@ -1,0 +1,14 @@
+{
+  "id": "short-noisy-voice",
+  "sourceUrl": "https://www.mozillafoundation.org/en/common-voice/platform-and-dataset/",
+  "fileName": "common-voice-short-noisy-read-speech.mp3",
+  "mimeType": "audio/mpeg",
+  "bytes": 76000,
+  "voiceSignals": {
+    "durationSeconds": 6.5,
+    "energy": 0.018,
+    "warmth": 0.31,
+    "averagePitchHz": 168,
+    "clippingRatio": 0.01
+  }
+}

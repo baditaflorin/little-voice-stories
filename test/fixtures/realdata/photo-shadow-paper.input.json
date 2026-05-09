@@ -1,0 +1,16 @@
+{
+  "id": "photo-shadow-paper",
+  "sourceUrl": "https://commons.wikimedia.org/wiki/Category:Drawings_by_children",
+  "fileName": "IMG_2048_child_art_on_table_shadow.jpg",
+  "mimeType": "image/jpeg",
+  "bytes": 3100000,
+  "signals": {
+    "width": 3024,
+    "height": 4032,
+    "inkCoverage": 0.58,
+    "colorfulness": 0.19,
+    "brightness": 0.47,
+    "edgeEnergy": 0.36,
+    "palette": ["#6b7280", "#f8fafc", "#0f766e"]
+  }
+}

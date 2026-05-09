@@ -1,0 +1,7 @@
+{
+  "subject": "story cover",
+  "sceneType": "mixed",
+  "minimumConfidence": 0.45,
+  "requiredSuggestions": ["large"],
+  "expectedIssues": ["large-file"]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "dataset-emotion-drawing",
+  "sourceUrl": "https://www.kaggle.com/datasets/vishmiperera/children-drawings",
+  "fileName": "happy-family-drawing-dataset.png",
+  "mimeType": "image/png",
+  "bytes": 540000,
+  "signals": {
+    "width": 1024,
+    "height": 768,
+    "inkCoverage": 0.29,
+    "colorfulness": 0.36,
+    "brightness": 0.84,
+    "edgeEnergy": 0.31,
+    "palette": ["#facc15", "#22c55e", "#38bdf8"]
+  }
+}

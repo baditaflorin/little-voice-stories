@@ -1,0 +1,7 @@
+{
+  "subject": "family and house",
+  "sceneType": "mixed",
+  "minimumConfidence": 0.58,
+  "requiredSuggestions": ["choose"],
+  "expectedIssues": ["mixed-subjects"]
+}

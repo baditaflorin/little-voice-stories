@@ -1,0 +1,4 @@
+{
+  "expectedErrorKind": "unsupported-format",
+  "expectedMessageWords": ["PDF", "photo", "image"]
+}

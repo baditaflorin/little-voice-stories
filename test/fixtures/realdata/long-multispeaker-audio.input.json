@@ -1,0 +1,14 @@
+{
+  "id": "long-multispeaker-audio",
+  "sourceUrl": "https://librivox.org/bedtimestories-by-anonymous/",
+  "fileName": "public-bedtime-story-long-multispeaker.mp3",
+  "mimeType": "audio/mpeg",
+  "bytes": 24000000,
+  "voiceSignals": {
+    "durationSeconds": 920,
+    "energy": 0.22,
+    "warmth": 0.64,
+    "averagePitchHz": 135,
+    "clippingRatio": 0.002
+  }
+}

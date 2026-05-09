@@ -1,0 +1,15 @@
+{
+  "id": "huge-image",
+  "fileName": "huge-phone-photo.jpg",
+  "mimeType": "image/jpeg",
+  "bytes": 18000000,
+  "signals": {
+    "width": 9000,
+    "height": 7000,
+    "inkCoverage": 0.25,
+    "colorfulness": 0.24,
+    "brightness": 0.7,
+    "edgeEnergy": 0.22,
+    "palette": ["#64748b"]
+  }
+}

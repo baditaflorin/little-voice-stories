@@ -1,0 +1,16 @@
+{
+  "id": "low-contrast-sketch",
+  "sourceUrl": "https://commons.wikimedia.org/wiki/Category:Drawings_by_children",
+  "fileName": "pencil-sketch-faint-scan.jpg",
+  "mimeType": "image/jpeg",
+  "bytes": 360000,
+  "signals": {
+    "width": 1600,
+    "height": 1000,
+    "inkCoverage": 0.018,
+    "colorfulness": 0.015,
+    "brightness": 0.97,
+    "edgeEnergy": 0.025,
+    "palette": ["#d1d5db"]
+  }
+}

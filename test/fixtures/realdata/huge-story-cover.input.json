@@ -1,0 +1,16 @@
+{
+  "id": "huge-story-cover",
+  "sourceUrl": "https://huggingface.co/datasets/6chan/children-hand-drawn-style-transfer",
+  "fileName": "child-story-cover-large-scan.webp",
+  "mimeType": "image/webp",
+  "bytes": 11800000,
+  "signals": {
+    "width": 5200,
+    "height": 3900,
+    "inkCoverage": 0.44,
+    "colorfulness": 0.52,
+    "brightness": 0.76,
+    "edgeEnergy": 0.42,
+    "palette": ["#f97316", "#a855f7", "#14b8a6"]
+  }
+}

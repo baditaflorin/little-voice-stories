@@ -1,0 +1,7 @@
+{
+  "subject": "faint drawing",
+  "sceneType": "unknown",
+  "maximumConfidence": 0.45,
+  "requiredSuggestions": ["darker", "brighter"],
+  "expectedIssues": ["low-contrast", "sparse-drawing"]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "toddler-sparse-smiley",
+  "sourceUrl": "https://commons.wikimedia.org/wiki/Category:Drawings_by_children",
+  "fileName": "toddler-smiley-face-scribble.png",
+  "mimeType": "image/png",
+  "bytes": 88000,
+  "signals": {
+    "width": 900,
+    "height": 700,
+    "inkCoverage": 0.025,
+    "colorfulness": 0.08,
+    "brightness": 0.94,
+    "edgeEnergy": 0.035,
+    "palette": ["#111827"]
+  }
+}

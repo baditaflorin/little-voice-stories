@@ -1,0 +1,7 @@
+{
+  "subject": "smiley face",
+  "sceneType": "character",
+  "maximumConfidence": 0.62,
+  "requiredSuggestions": ["add a note"],
+  "expectedIssues": ["sparse-drawing"]
+}

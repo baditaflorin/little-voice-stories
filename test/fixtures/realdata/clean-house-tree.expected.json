@@ -1,0 +1,7 @@
+{
+  "subject": "house and tree",
+  "sceneType": "place",
+  "minimumConfidence": 0.7,
+  "requiredStoryWords": ["house", "tree"],
+  "expectedIssues": []
+}

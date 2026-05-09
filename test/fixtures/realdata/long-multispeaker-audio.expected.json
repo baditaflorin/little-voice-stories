@@ -1,0 +1,4 @@
+{
+  "expectedErrorKind": "unsupported-format",
+  "expectedMessageWords": ["microphone", "30 seconds", "single parent"]
+}
