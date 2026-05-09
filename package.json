@@ -1,6 +1,6 @@
 {
   "name": "little-voice-stories",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Turn a kid's drawing into a bedtime story narrated in a parent's voice, entirely in the browser.",
