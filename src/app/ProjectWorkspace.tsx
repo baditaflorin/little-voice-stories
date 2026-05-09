@@ -39,6 +39,7 @@ import {
 import { generateWithWebLlm, type WebLlmProgress } from '../features/story/webLlm';
 import { canNarrate, speakStory, type NarrationControls } from '../features/voice/narration';
 import { appMeta } from '../lib/appMeta';
+import { isDomainError } from '../lib/domainError';
 
 type StepId = 'drawing' | 'character' | 'story' | 'voice';
 
@@ -46,6 +47,12 @@ type Toast = {
   id: number;
   message: string;
   tone: 'info' | 'success' | 'error';
+};
+
+type ActivityEvent = {
+  id: number;
+  at: string;
+  label: string;
 };
 
 const steps: Array<{ id: StepId; label: string }> = [
@@ -63,6 +70,9 @@ export function ProjectWorkspace() {
   const [voiceProfile, setVoiceProfile] = useState<VoiceProfile>();
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [activity, setActivity] = useState<ActivityEvent[]>([]);
+  const [subjectCorrections, setSubjectCorrections] = useState<Record<string, string>>({});
+  const debugEnabled = new URLSearchParams(window.location.search).get('debug') === '1';
 
   useEffect(() => {
     loadCurrentProject()
@@ -104,12 +114,26 @@ export function ProjectWorkspace() {
     }, 5200);
   }
 
+  function recordActivity(label: string) {
+    setActivity((items) =>
+      [
+        {
+          id: Date.now(),
+          at: new Date().toISOString(),
+          label,
+        },
+        ...items,
+      ].slice(0, 8),
+    );
+  }
+
   async function resetProject() {
     await clearCurrentProject();
     setDrawing(undefined);
     setCharacter(defaultCharacterProfile());
     setStory(undefined);
     setVoiceProfile(undefined);
+    setActivity([]);
     setActiveStep('drawing');
     pushToast('Local project cleared.', 'success');
   }
@@ -158,14 +182,24 @@ export function ProjectWorkspace() {
             <DrawingStep
               drawing={drawing}
               onDrawing={(analysis) => {
+                const learnedName = subjectCorrections[analysis.subject.label];
+                const inferredName = learnedName ?? toTitleCase(analysis.subject.label);
                 setDrawing(analysis);
                 setCharacter((current) => ({
                   ...current,
-                  characterName: current.characterName || analysis.suggestedName,
+                  characterName: current.characterName || inferredName || analysis.suggestedName,
                 }));
                 setStory(undefined);
                 setActiveStep('character');
-                pushToast('Drawing digitized into a character seed.', 'success');
+                recordActivity(
+                  `Drawing analyzed as ${analysis.subject.label} (${analysis.subject.confidence.label})`,
+                );
+                pushToast(
+                  analysis.subject.confidence.label === 'low'
+                    ? 'Drawing analyzed with low confidence. Check the suggested fix.'
+                    : `Drawing analyzed as ${analysis.subject.label}.`,
+                  analysis.subject.confidence.label === 'low' ? 'info' : 'success',
+                );
               }}
               onToast={pushToast}
             />
@@ -176,6 +210,11 @@ export function ProjectWorkspace() {
               drawing={drawing}
               character={character}
               onCharacter={setCharacter}
+              onSubjectNameCorrection={(subject, name) => {
+                if (name.trim()) {
+                  setSubjectCorrections((current) => ({ ...current, [subject]: name.trim() }));
+                }
+              }}
               onNext={() => setActiveStep('story')}
             />
           )}
@@ -185,7 +224,12 @@ export function ProjectWorkspace() {
               drawing={drawing}
               character={character}
               story={story}
-              onStory={setStory}
+              onStory={(nextStory) => {
+                setStory(nextStory);
+                if (story?.id !== nextStory.id) {
+                  recordActivity(`Story generated from ${nextStory.provenance.subject}`);
+                }
+              }}
               onToast={pushToast}
               onNext={() => setActiveStep('voice')}
             />
@@ -195,7 +239,10 @@ export function ProjectWorkspace() {
             <VoiceStep
               story={story}
               voiceProfile={voiceProfile}
-              onVoiceProfile={setVoiceProfile}
+              onVoiceProfile={(profile) => {
+                setVoiceProfile(profile);
+                recordActivity(`Voice profile quality ${profile.quality.label}`);
+              }}
               onToast={pushToast}
             />
           )}
@@ -208,6 +255,10 @@ export function ProjectWorkspace() {
             Reset local data
           </button>
         </footer>
+
+        {debugEnabled && (
+          <DebugPanel drawing={drawing} story={story} voiceProfile={voiceProfile} activity={activity} />
+        )}
       </main>
 
       <div className="toast-region" aria-live="assertive" aria-relevant="additions">
@@ -253,26 +304,30 @@ function DrawingStep({
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   async function analyze(file: File) {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setIsAnalyzing(true);
     try {
-      onDrawing(await analyzeDrawingFile(file));
+      onDrawing(await analyzeDrawingFile(file, { signal: controller.signal }));
     } catch (error) {
-      onToast(error instanceof Error ? error.message : 'Drawing analysis failed.', 'error');
+      onToast(formatError(error, 'Drawing analysis failed.'), isDomainError(error) ? 'info' : 'error');
     } finally {
-      setIsAnalyzing(false);
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+        setIsAnalyzing(false);
+      }
     }
   }
 
   async function loadSample() {
-    setIsAnalyzing(true);
     try {
-      onDrawing(await analyzeDrawingFile(await loadSampleDrawing()));
+      await analyze(await loadSampleDrawing());
     } catch (error) {
-      onToast(error instanceof Error ? error.message : 'Sample drawing failed.', 'error');
-    } finally {
-      setIsAnalyzing(false);
+      onToast(formatError(error, 'Sample drawing failed.'), 'error');
     }
   }
 
@@ -320,10 +375,19 @@ function DrawingStep({
           </button>
         </div>
         {isAnalyzing && (
-          <p className="inline-status">
-            <Loader2 className="spin" size={18} />
-            Reading colors and shapes
-          </p>
+          <div className="inline-status">
+            <span>
+              <Loader2 className="spin" size={18} />
+              Reading colors and shapes
+            </span>
+            <button
+              className="text-button text-button--compact"
+              type="button"
+              onClick={() => abortRef.current?.abort()}
+            >
+              Cancel
+            </button>
+          </div>
         )}
       </div>
 
@@ -345,12 +409,36 @@ function DrawingSummary({ drawing }: { drawing?: DrawingAnalysis }) {
   return (
     <aside className="summary-panel">
       <img className="drawing-preview" src={drawing.previewDataUrl} alt="Digitized kid drawing" />
+      <div className={`confidence-banner confidence-banner--${drawing.subject.confidence.label}`}>
+        <strong>{drawing.subject.label}</strong>
+        <span>
+          {drawing.subject.confidence.label} confidence ·{' '}
+          {Math.round(drawing.subject.confidence.score * 100)}%
+        </span>
+      </div>
       <div>
         <h2>{drawing.suggestedName}</h2>
         <p>
           {drawing.characterSeed.mood} {drawing.characterSeed.shape} who {drawing.characterSeed.gift}.
         </p>
       </div>
+      <details className="explain-block">
+        <summary>Why this guess?</summary>
+        <ul>
+          {drawing.subject.confidence.reasons.map((reason) => (
+            <li key={reason}>{reason}</li>
+          ))}
+        </ul>
+      </details>
+      {drawing.issues.length > 0 && (
+        <div className="issue-list" role="status">
+          {drawing.issues.map((issue) => (
+            <p key={issue.id}>
+              <strong>{issue.message}</strong> {issue.suggestion}
+            </p>
+          ))}
+        </div>
+      )}
       <div className="palette" aria-label="Extracted drawing palette">
         {drawing.palette.map((color) => (
           <span key={color.hex} style={{ backgroundColor: color.hex }} title={color.hex} />
@@ -360,6 +448,7 @@ function DrawingSummary({ drawing }: { drawing?: DrawingAnalysis }) {
         <Metric label="Ink" value={`${Math.round(drawing.inkCoverage * 100)}%`} />
         <Metric label="Color" value={`${Math.round(drawing.colorfulness * 100)}%`} />
         <Metric label="Edges" value={`${Math.round(drawing.edgeEnergy * 100)}%`} />
+        <Metric label="Quality" value={`${Math.round(drawing.quality.score * 100)}%`} />
       </dl>
     </aside>
   );
@@ -369,14 +458,22 @@ function CharacterStep({
   drawing,
   character,
   onCharacter,
+  onSubjectNameCorrection,
   onNext,
 }: {
   drawing?: DrawingAnalysis;
   character: CharacterProfile;
   onCharacter: (character: CharacterProfile) => void;
+  onSubjectNameCorrection: (subject: string, name: string) => void;
   onNext: () => void;
 }) {
-  const update = (patch: Partial<CharacterProfile>) => onCharacter({ ...character, ...patch });
+  const update = (patch: Partial<CharacterProfile>) => {
+    if (drawing && typeof patch.characterName === 'string') {
+      onSubjectNameCorrection(drawing.subject.label, patch.characterName);
+    }
+    onCharacter({ ...character, ...patch });
+  };
+  const inferredName = drawing ? toTitleCase(drawing.subject.label) : 'Lumi Sky';
 
   return (
     <div className="form-grid">
@@ -386,10 +483,19 @@ function CharacterStep({
           Character name
           <input
             value={character.characterName}
-            placeholder={drawing?.suggestedName ?? 'Lumi Sky'}
+            placeholder={inferredName}
             onChange={(event) => update({ characterName: event.target.value })}
           />
         </label>
+        {drawing && character.characterName.trim() !== inferredName && (
+          <button
+            className="text-button align-start"
+            type="button"
+            onClick={() => update({ characterName: inferredName })}
+          >
+            Use "{inferredName}"
+          </button>
+        )}
         <label>
           Child name
           <input
@@ -503,6 +609,12 @@ function StoryStep({
       <div className="story-actions">
         <h2>Bedtime story</h2>
         <p className="muted">{metrics}</p>
+        {story && (
+          <p className="provenance-line">
+            Story {story.id} · {story.provenance.subject} ·{' '}
+            {Math.round(story.provenance.subjectConfidence * 100)}% subject confidence
+          </p>
+        )}
         <div className="button-row">
           <button
             className="primary-button"
@@ -629,7 +741,12 @@ function VoiceStep({
         analyzeAudioBlob(blob)
           .then((profile) => {
             onVoiceProfile(profile);
-            onToast('Parent voice profile created locally.', 'success');
+            onToast(
+              profile.quality.label === 'low'
+                ? 'Voice profile created, but the recording needs another take.'
+                : 'Parent voice profile created locally.',
+              profile.quality.label === 'low' ? 'info' : 'success',
+            );
           })
           .catch((error) =>
             onToast(error instanceof Error ? error.message : 'Voice analysis failed.', 'error'),
@@ -727,12 +844,23 @@ function VoiceStep({
       <div className="voice-profile-panel">
         <h2>Narration</h2>
         {voiceProfile ? (
-          <dl className="metric-grid">
-            <Metric label="Profile" value={voiceProfile.label} />
-            <Metric label="Pitch" value={`${Math.round(voiceProfile.averagePitchHz)} Hz`} />
-            <Metric label="Warmth" value={`${Math.round(voiceProfile.warmth * 100)}%`} />
-            <Metric label="Duration" value={`${Math.round(voiceProfile.durationSeconds)}s`} />
-          </dl>
+          <>
+            <dl className="metric-grid">
+              <Metric label="Profile" value={voiceProfile.label} />
+              <Metric label="Pitch" value={`${Math.round(voiceProfile.averagePitchHz)} Hz`} />
+              <Metric label="Warmth" value={`${Math.round(voiceProfile.warmth * 100)}%`} />
+              <Metric label="Duration" value={`${Math.round(voiceProfile.durationSeconds)}s`} />
+              <Metric
+                label="Quality"
+                value={`${voiceProfile.quality.label} · ${Math.round(voiceProfile.quality.score * 100)}%`}
+              />
+            </dl>
+            <div className="issue-list">
+              {voiceProfile.quality.suggestions.map((suggestion) => (
+                <p key={suggestion}>{suggestion}</p>
+              ))}
+            </div>
+          </>
         ) : (
           <p className="muted">Voice profile is waiting.</p>
         )}
@@ -777,4 +905,63 @@ function Metric({ label, value }: { label: string; value: string }) {
       <dd>{value}</dd>
     </div>
   );
+}
+
+function DebugPanel({
+  drawing,
+  story,
+  voiceProfile,
+  activity,
+}: {
+  drawing?: DrawingAnalysis;
+  story?: GeneratedStory;
+  voiceProfile?: VoiceProfile;
+  activity: ActivityEvent[];
+}) {
+  return (
+    <section className="debug-panel" aria-label="Debug state">
+      <h2>Debug</h2>
+      <pre>
+        {JSON.stringify(
+          {
+            app: appMeta,
+            drawing: drawing && {
+              source: drawing.source,
+              subject: drawing.subject,
+              quality: drawing.quality,
+              issues: drawing.issues,
+            },
+            story: story && {
+              id: story.id,
+              provenance: story.provenance,
+              wordCount: story.wordCount,
+            },
+            voiceProfile: voiceProfile && {
+              id: voiceProfile.id,
+              quality: voiceProfile.quality,
+              durationSeconds: voiceProfile.durationSeconds,
+            },
+            activity,
+          },
+          null,
+          2,
+        )}
+      </pre>
+    </section>
+  );
+}
+
+function formatError(error: unknown, fallback: string) {
+  if (isDomainError(error)) {
+    return error.message;
+  }
+  return error instanceof Error ? error.message : fallback;
+}
+
+function toTitleCase(value: string) {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`)
+    .join(' ');
 }

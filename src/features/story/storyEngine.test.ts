@@ -7,6 +7,12 @@ const drawing: DrawingAnalysis = {
   previewDataUrl: 'data:image/webp;base64,abc',
   width: 120,
   height: 80,
+  source: {
+    id: 'fixture-drawing',
+    name: 'house-tree.png',
+    type: 'image/png',
+    size: 1200,
+  },
   palette: [{ hex: '#14b8a6', population: 10 }],
   inkCoverage: 0.4,
   colorfulness: 0.5,
@@ -19,6 +25,22 @@ const drawing: DrawingAnalysis = {
     gift: 'keeps promises warm',
     challenge: 'learning to rest',
   },
+  subject: {
+    label: 'house and tree',
+    sceneType: 'place',
+    confidence: {
+      score: 0.78,
+      label: 'high',
+      reasons: ['Filename contains house / tree.'],
+    },
+    storyHints: ['house', 'tree'],
+  },
+  quality: {
+    score: 0.8,
+    label: 'high',
+    reasons: ['Drawing has enough visible marks for a useful first pass.'],
+  },
+  issues: [],
 };
 
 describe('generateTemplateStory', () => {
@@ -34,6 +56,9 @@ describe('generateTemplateStory', () => {
 
     expect(first.title).toContain('Pip Lantern');
     expect(first.text).toContain('Mara');
+    expect(first.text).toContain('house and tree');
+    expect(first.provenance.drawingSourceId).toBe('fixture-drawing');
+    expect(first.provenance.subjectConfidence).toBe(0.78);
     expect(first.wordCount).toBeGreaterThan(250);
     expect(first).toEqual(second);
   });

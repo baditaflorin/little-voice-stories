@@ -12,7 +12,7 @@ test('published app happy path', async ({ page }) => {
     'href',
     'https://www.paypal.com/paypalme/florinbadita',
   );
-  await expect(page.getByText(/v0\.1\.0/)).toBeVisible();
+  await expect(page.getByText(/v0\.\d+\.\d+/)).toBeVisible();
 
   await page.getByRole('button', { name: /Use sample/i }).click();
   await expect(page.getByRole('heading', { name: 'Character' })).toBeVisible();

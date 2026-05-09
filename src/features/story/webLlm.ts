@@ -47,10 +47,19 @@ export async function generateWithWebLlm(
   }
 
   return generatedStorySchema.parse({
+    id: `story-web-llm-${inputs.drawing.source.id.slice(0, 8)}`,
     title: `${inputs.character.characterName || inputs.drawing.suggestedName}'s Bedtime Road`,
     text,
     estimatedMinutes: Math.max(3, Math.round(countWords(text) / 145)),
     wordCount: countWords(text),
     generatedBy: 'web-llm',
+    provenance: {
+      schemaVersion: 'story.v2',
+      appVersion: __APP_VERSION__,
+      drawingSourceId: inputs.drawing.source.id,
+      subject: inputs.drawing.subject.label,
+      subjectConfidence: inputs.drawing.subject.confidence.score,
+      storyTone: inputs.character.storyTone,
+    },
   });
 }

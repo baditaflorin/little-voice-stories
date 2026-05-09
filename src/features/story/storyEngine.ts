@@ -12,11 +12,20 @@ export const characterProfileSchema = z.object({
 });
 
 export const generatedStorySchema = z.object({
+  id: z.string(),
   title: z.string(),
   text: z.string(),
   estimatedMinutes: z.number(),
   wordCount: z.number(),
   generatedBy: z.enum(['local-story-engine', 'web-llm']),
+  provenance: z.object({
+    schemaVersion: z.literal('story.v2'),
+    appVersion: z.string(),
+    drawingSourceId: z.string(),
+    subject: z.string(),
+    subjectConfidence: z.number(),
+    storyTone: z.string(),
+  }),
 });
 
 export type CharacterProfile = z.infer<typeof characterProfileSchema>;
@@ -68,6 +77,8 @@ export function generateTemplateStory(inputs: StoryInputs): GeneratedStory {
   const pick = picker(seed);
   const hero = character.characterName.trim() || drawing.suggestedName;
   const child = character.childName.trim() || 'my little one';
+  const subject = drawing.subject.label;
+  const subjectHints = drawing.subject.storyHints.filter((hint) => hint.startsWith('#') === false);
   const helper = pick(HELPERS);
   const opening = pick(OPENINGS);
   const ending = pick(LULLABY_ENDINGS);
@@ -79,7 +90,7 @@ export function generateTemplateStory(inputs: StoryInputs): GeneratedStory {
   const tone = toneWords(character.storyTone);
 
   const paragraphs = [
-    `${opening}, ${hero} stretched in the corner of a drawing and discovered that crayon lines could become roads. ${hero} was a ${seedWords.mood} ${seedWords.shape}, colored with ${paletteWords}, and carrying the special gift that ${seedWords.gift}.`,
+    `${opening}, ${hero} stretched in the corner of a drawing and discovered that crayon lines could become roads. The drawing looked most like ${articleFor(subject)} ${subject}, with ${subjectHints.join(', ') || 'soft crayon clues'} tucked into its colors. ${hero} was a ${seedWords.mood} ${seedWords.shape}, colored with ${paletteWords}, and carrying the special gift that ${seedWords.gift}.`,
     `${child} had drawn ${hero} with just enough wiggles to make the moon curious. So when the room grew quiet, ${hero} stepped gently from the page, brushed off a sprinkle of paper dust, and whispered, "Tonight we will make distance feel small."`,
     `The first stop was ${character.setting}. There, the floorboards sounded like tiny drums and the air smelled like clean pajamas. ${hero} tucked ${character.favoriteObject} under one arm and followed a trail of sleepy sparkles toward a door that only opened for kind voices.`,
     `Behind the door waited the problem of the night: ${seedWords.challenge}. It was not a scary problem. It was the sort that sat heavily on the edge of the bed and forgot how to ask for comfort. ${hero} sat beside it and listened until the problem became small enough to hold.`,
@@ -95,11 +106,20 @@ export function generateTemplateStory(inputs: StoryInputs): GeneratedStory {
   const wordCount = countWords(text);
 
   return generatedStorySchema.parse({
+    id: stableStoryId(inputs),
     title: `${hero} and the Bridge of Goodnight`,
     text,
     estimatedMinutes: Math.max(3, Math.round(wordCount / 145)),
     wordCount,
     generatedBy: 'local-story-engine',
+    provenance: {
+      schemaVersion: 'story.v2',
+      appVersion: __APP_VERSION__,
+      drawingSourceId: drawing.source.id,
+      subject,
+      subjectConfidence: drawing.subject.confidence.score,
+      storyTone: character.storyTone,
+    },
   });
 }
 
@@ -109,6 +129,9 @@ export function buildLocalLlmPrompt(inputs: StoryInputs) {
     'Write a warm 3 to 5 minute bedtime story for a child.',
     `Child name: ${character.childName}.`,
     `Main character from the drawing: ${character.characterName || drawing.suggestedName}.`,
+    `Likely visible subject: ${drawing.subject.label} (${drawing.subject.confidence.label} confidence).`,
+    `Subject reasoning: ${drawing.subject.confidence.reasons.join('; ')}.`,
+    `Story hints: ${drawing.subject.storyHints.join(', ')}.`,
     `Character traits inferred from the drawing: ${drawing.characterSeed.mood}, ${drawing.characterSeed.shape}, ${drawing.characterSeed.gift}.`,
     `Story setting: ${character.setting}.`,
     `Favorite comfort object: ${character.favoriteObject}.`,
@@ -144,6 +167,22 @@ function hashString(value: string) {
     hash = Math.imul(hash, 16777619);
   }
   return hash >>> 0;
+}
+
+function stableStoryId(inputs: StoryInputs) {
+  const value = [
+    inputs.drawing.source.id,
+    inputs.drawing.subject.label,
+    inputs.character.characterName,
+    inputs.character.childName,
+    inputs.character.setting,
+    inputs.character.storyTone,
+  ].join(':');
+  return `story-${hashString(value).toString(16).padStart(8, '0')}`;
+}
+
+function articleFor(value: string) {
+  return /^[aeiou]/i.test(value) ? 'an' : 'a';
 }
 
 function picker(seed: number) {

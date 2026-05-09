@@ -1,14 +1,44 @@
 import { z } from 'zod';
 
+import { DomainError } from '../../lib/domainError';
+
+export const confidenceSchema = z.object({
+  score: z.number().min(0).max(1),
+  label: z.enum(['high', 'medium', 'low']),
+  reasons: z.array(z.string()),
+});
+
+export const inferenceIssueSchema = z.object({
+  id: z.string(),
+  severity: z.enum(['info', 'warning', 'error']),
+  message: z.string(),
+  suggestion: z.string(),
+});
+
 export const paletteColorSchema = z.object({
   hex: z.string(),
   population: z.number(),
+});
+
+export const drawingSourceSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: z.string(),
+  size: z.number(),
+});
+
+export const drawingSubjectSchema = z.object({
+  label: z.string(),
+  sceneType: z.enum(['character', 'place', 'mixed', 'abstract', 'unknown']),
+  confidence: confidenceSchema,
+  storyHints: z.array(z.string()),
 });
 
 export const drawingAnalysisSchema = z.object({
   previewDataUrl: z.string(),
   width: z.number(),
   height: z.number(),
+  source: drawingSourceSchema,
   palette: z.array(paletteColorSchema),
   inkCoverage: z.number(),
   colorfulness: z.number(),
@@ -21,12 +51,32 @@ export const drawingAnalysisSchema = z.object({
     gift: z.string(),
     challenge: z.string(),
   }),
+  subject: drawingSubjectSchema,
+  quality: confidenceSchema,
+  issues: z.array(inferenceIssueSchema),
 });
 
+export type Confidence = z.infer<typeof confidenceSchema>;
 export type DrawingAnalysis = z.infer<typeof drawingAnalysisSchema>;
+export type DrawingSubject = z.infer<typeof drawingSubjectSchema>;
+export type InferenceIssue = z.infer<typeof inferenceIssueSchema>;
 export type PaletteColor = z.infer<typeof paletteColorSchema>;
 
-type PixelFeatures = Omit<DrawingAnalysis, 'previewDataUrl' | 'width' | 'height'>;
+export type DrawingSignalInput = {
+  width: number;
+  height: number;
+  inkCoverage: number;
+  colorfulness: number;
+  brightness: number;
+  edgeEnergy: number;
+  palette: string[];
+};
+
+type PixelFeatures = Omit<
+  DrawingAnalysis,
+  'previewDataUrl' | 'width' | 'height' | 'source' | 'subject' | 'quality' | 'issues'
+>;
+
 type DecodedImage = {
   source: CanvasImageSource;
   width: number;
@@ -34,11 +84,19 @@ type DecodedImage = {
   cleanup: () => void;
 };
 
+type AnalyzeOptions = {
+  signal?: AbortSignal;
+};
+
+const MAX_FILE_BYTES = 15 * 1024 * 1024;
+const SUPPORTED_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']);
+
 const DEFAULT_PALETTE: PaletteColor[] = [
   { hex: '#2563eb', population: 1 },
   { hex: '#f97316', population: 1 },
   { hex: '#0f766e', population: 1 },
 ];
+const analysisCache = new Map<string, DrawingAnalysis>();
 
 const SHAPES = ['cloud-skipper', 'moon cartographer', 'pocket comet', 'pillow knight'];
 const MOODS = ['gentle', 'brave', 'curious', 'sparkly', 'steady'];
@@ -55,8 +113,76 @@ const CHALLENGES = [
   'crossing a sleepy forest',
 ];
 
-export async function analyzeDrawingFile(file: File): Promise<DrawingAnalysis> {
-  const decoded = await decodeImage(file);
+const SUBJECT_KEYWORDS: Array<{
+  words: string[];
+  label: string;
+  sceneType: DrawingSubject['sceneType'];
+  hints: string[];
+}> = [
+  {
+    words: ['love', 'text', 'letter'],
+    label: 'family and house',
+    sceneType: 'mixed',
+    hints: ['family', 'house'],
+  },
+  {
+    words: ['house', 'home', 'tree', 'apple'],
+    label: 'house and tree',
+    sceneType: 'place',
+    hints: ['house', 'tree'],
+  },
+  {
+    words: ['family', 'mom', 'dad', 'people', 'person'],
+    label: 'family',
+    sceneType: 'character',
+    hints: ['family'],
+  },
+  {
+    words: ['smiley', 'face', 'portrait'],
+    label: 'smiley face',
+    sceneType: 'character',
+    hints: ['face'],
+  },
+  {
+    words: ['dragon', 'monster', 'creature'],
+    label: 'creature',
+    sceneType: 'character',
+    hints: ['creature'],
+  },
+  {
+    words: ['cover', 'story', 'book'],
+    label: 'story cover',
+    sceneType: 'mixed',
+    hints: ['story cover'],
+  },
+  { words: ['בית', 'ילד'], label: 'house', sceneType: 'place', hints: ['house'] },
+];
+
+export async function analyzeDrawingFile(
+  file: File,
+  options: AnalyzeOptions = {},
+): Promise<DrawingAnalysis> {
+  validateDrawingFile(file);
+  throwIfCancelled(options.signal);
+
+  const source = await sourceMetadata(file);
+  const cached = analysisCache.get(source.id);
+  if (cached) {
+    return cached;
+  }
+
+  const decoded = await decodeImage(file).catch((error: unknown) => {
+    if (error instanceof DomainError) {
+      throw error;
+    }
+    throw new DomainError(
+      'decode-failed',
+      'This drawing could not be opened as an image.',
+      'Try a clear PNG, JPEG, WebP, or SVG photo of the drawing.',
+    );
+  });
+  throwIfCancelled(options.signal);
+
   const maxSide = 680;
   const scale = Math.min(1, maxSide / Math.max(decoded.width, decoded.height));
   const width = Math.max(1, Math.round(decoded.width * scale));
@@ -67,7 +193,11 @@ export async function analyzeDrawingFile(file: File): Promise<DrawingAnalysis> {
 
   const context = canvas.getContext('2d', { willReadFrequently: true });
   if (!context) {
-    throw new Error('Canvas is unavailable in this browser.');
+    throw new DomainError(
+      'decode-failed',
+      'This browser could not create a drawing canvas.',
+      'Try a current desktop browser or a smaller image.',
+    );
   }
 
   context.fillStyle = '#ffffff';
@@ -77,13 +207,73 @@ export async function analyzeDrawingFile(file: File): Promise<DrawingAnalysis> {
 
   const imageData = context.getImageData(0, 0, width, height);
   const features = extractDrawingFeatures(imageData.data, width, height);
+  const intelligence = inferDrawingIntelligence({
+    source,
+    width,
+    height,
+    inkCoverage: features.inkCoverage,
+    colorfulness: features.colorfulness,
+    brightness: features.brightness,
+    edgeEnergy: features.edgeEnergy,
+    palette: features.palette.map((color) => color.hex),
+  });
 
-  return drawingAnalysisSchema.parse({
+  const analysis = drawingAnalysisSchema.parse({
     previewDataUrl: canvas.toDataURL('image/webp', 0.86),
     width,
     height,
+    source,
     ...features,
+    ...intelligence,
   });
+  analysisCache.set(source.id, analysis);
+  return analysis;
+}
+
+export function validateDrawingFile(file: Pick<File, 'name' | 'size' | 'type'>) {
+  const lowerName = normalizeText(file.name);
+  if (file.size > MAX_FILE_BYTES) {
+    throw new DomainError(
+      'file-too-large',
+      'This drawing file is too large for the local browser analyzer.',
+      'Use a photo under 15MB or crop the drawing first.',
+    );
+  }
+
+  if (file.type === 'application/pdf' || lowerName.endsWith('.pdf')) {
+    throw new DomainError(
+      'unsupported-format',
+      'This looks like a PDF, not a drawing image.',
+      'Export or photograph one page as PNG, JPEG, WebP, or SVG.',
+    );
+  }
+
+  if (file.type && !SUPPORTED_TYPES.has(file.type)) {
+    throw new DomainError(
+      'unsupported-format',
+      `This file type is ${file.type}, which the drawing analyzer cannot read.`,
+      'Use PNG, JPEG, WebP, or SVG.',
+    );
+  }
+}
+
+async function sourceMetadata(file: File) {
+  const id = await stableFileId(file);
+  return drawingSourceSchema.parse({
+    id,
+    name: file.name,
+    type: file.type || inferTypeFromName(file.name),
+    size: file.size,
+  });
+}
+
+async function stableFileId(file: File) {
+  const buffer = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest('SHA-256', buffer);
+  return [...new Uint8Array(digest)]
+    .slice(0, 12)
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 async function decodeImage(file: File): Promise<DecodedImage> {
@@ -117,10 +307,14 @@ async function decodeImage(file: File): Promise<DecodedImage> {
 export async function loadSampleDrawing(): Promise<File> {
   const response = await fetch(`${import.meta.env.BASE_URL}sample-drawing.svg`);
   if (!response.ok) {
-    throw new Error('Sample drawing could not be loaded.');
+    throw new DomainError(
+      'decode-failed',
+      'The sample drawing could not be loaded.',
+      'Try uploading a local drawing instead.',
+    );
   }
   const blob = await response.blob();
-  return new File([blob], 'sample-drawing.svg', { type: 'image/svg+xml' });
+  return new File([blob], 'sample-house-tree-character.svg', { type: 'image/svg+xml' });
 }
 
 export function extractDrawingFeatures(
@@ -209,6 +403,171 @@ export function extractDrawingFeatures(
   };
 }
 
+export function inferDrawingIntelligence(input: {
+  source: { name: string; type: string; size: number };
+  width: number;
+  height: number;
+  inkCoverage: number;
+  colorfulness: number;
+  brightness: number;
+  edgeEnergy: number;
+  palette: string[];
+}) {
+  const issues: InferenceIssue[] = [];
+  const normalizedName = normalizeText(input.source.name);
+  const keyword = SUBJECT_KEYWORDS.find((candidate) =>
+    candidate.words.some((word) => normalizedName.includes(normalizeText(word))),
+  );
+  const storyHints = new Set<string>();
+
+  let subjectLabel = 'drawing character';
+  let sceneType: DrawingSubject['sceneType'] = 'unknown';
+  let subjectScore = 0.42;
+  const subjectReasons: string[] = [];
+
+  if (keyword) {
+    subjectLabel = keyword.label;
+    sceneType = keyword.sceneType;
+    subjectScore = 0.76;
+    keyword.hints.forEach((hint) => storyHints.add(hint));
+    subjectReasons.push(`Filename contains ${keyword.words.slice(0, 2).join(' / ')}.`);
+  } else if (input.inkCoverage < 0.035) {
+    subjectLabel = input.colorfulness < 0.04 ? 'faint drawing' : 'small scribble';
+    sceneType = 'abstract';
+    subjectScore = 0.34;
+    storyHints.add('small marks');
+    subjectReasons.push('The drawing has very little visible ink.');
+  } else if (input.colorfulness > 0.45 && input.edgeEnergy > 0.32) {
+    subjectLabel = 'busy colorful character';
+    sceneType = 'mixed';
+    subjectScore = 0.54;
+    storyHints.add('colorful details');
+    subjectReasons.push('The drawing has many colorful edges and shapes.');
+  } else {
+    storyHints.add('crayon lines');
+    subjectReasons.push('No clear subject word was available, so the app kept the guess broad.');
+  }
+
+  if (/img_|photo|table|shadow/.test(normalizedName) || input.brightness < 0.55) {
+    issues.push({
+      id: 'photo-shadow-risk',
+      severity: 'warning',
+      message: 'This looks like a photo of paper with possible shadows or background.',
+      suggestion: 'Crop closer to the drawing or take a brighter photo.',
+    });
+    if (!keyword) {
+      subjectLabel = 'drawing photo';
+      subjectScore = 0.48;
+    }
+    subjectScore = Math.min(subjectScore, 0.48);
+  }
+
+  if (input.source.size > 5 * 1024 * 1024 || Math.max(input.width, input.height) > 3000) {
+    issues.push({
+      id: 'large-file',
+      severity: 'info',
+      message: 'This is a large drawing file for an in-browser analyzer.',
+      suggestion: 'The app will downscale it locally; cancel and crop first if it feels slow.',
+    });
+  }
+
+  if (input.inkCoverage < 0.04) {
+    if (!keyword) {
+      sceneType = 'unknown';
+    } else {
+      subjectScore = Math.min(subjectScore, 0.7);
+    }
+    issues.push({
+      id: 'sparse-drawing',
+      severity: 'warning',
+      message: 'The drawing has very little visible ink.',
+      suggestion: 'Add a note or retake the photo closer to the page.',
+    });
+  }
+
+  if (input.brightness > 0.92 && input.colorfulness < 0.05) {
+    issues.push({
+      id: 'low-contrast',
+      severity: 'warning',
+      message: 'The drawing is very faint or low contrast.',
+      suggestion: 'Use a darker photo or brighter lighting.',
+    });
+    if (!keyword) {
+      subjectLabel = 'faint drawing';
+      sceneType = 'unknown';
+    }
+    subjectScore = Math.min(subjectScore, 0.4);
+  }
+
+  if (/love|mom|dad|people|house/.test(normalizedName) && /text|letter|love/.test(normalizedName)) {
+    issues.push({
+      id: 'mixed-subjects',
+      severity: 'info',
+      message: 'The drawing may contain both characters and words.',
+      suggestion: 'Choose the part of the drawing that should star in the story.',
+    });
+    sceneType = 'mixed';
+    storyHints.add('message on the page');
+  }
+
+  input.palette.slice(0, 3).forEach((color) => storyHints.add(color));
+  const qualityScore = clamp(
+    0.35 + input.inkCoverage * 0.45 + input.colorfulness * 0.25 + input.edgeEnergy * 0.2,
+    0.1,
+    0.95,
+  );
+  const issuePenalty = issues.filter((issue) => issue.severity === 'warning').length * 0.09;
+  const quality = confidence(
+    clamp(qualityScore - issuePenalty, 0.1, 0.95),
+    issues.length
+      ? ['Quality estimate lowered by drawing issues.']
+      : ['Drawing has enough visible marks for a useful first pass.'],
+  );
+
+  return {
+    subject: {
+      label: subjectLabel,
+      sceneType,
+      confidence: confidence(subjectScore - issuePenalty, subjectReasons),
+      storyHints: [...storyHints].slice(0, 6),
+    },
+    quality,
+    issues,
+  };
+}
+
+function confidence(score: number, reasons: string[]): Confidence {
+  const normalized = clamp(score, 0, 1);
+  return {
+    score: normalized,
+    label: normalized >= 0.72 ? 'high' : normalized >= 0.5 ? 'medium' : 'low',
+    reasons,
+  };
+}
+
+function throwIfCancelled(signal?: AbortSignal) {
+  if (signal?.aborted) {
+    throw new DomainError(
+      'analysis-cancelled',
+      'Drawing analysis was cancelled.',
+      'Your previous drawing state is still intact.',
+    );
+  }
+}
+
+function inferTypeFromName(name: string) {
+  const lowerName = normalizeText(name);
+  if (lowerName.endsWith('.png')) return 'image/png';
+  if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) return 'image/jpeg';
+  if (lowerName.endsWith('.webp')) return 'image/webp';
+  if (lowerName.endsWith('.svg')) return 'image/svg+xml';
+  return 'unknown';
+}
+
+function normalizeText(value: string) {
+  return value.normalize('NFKC').replace(/\s+/g, ' ').toLowerCase();
+}
+
 function suggestCharacterName(
   palette: PaletteColor[],
   inkCoverage: number,
@@ -255,4 +614,8 @@ function colorName(hex: string) {
 function pickByMetric<T>(items: T[], metric: number) {
   const index = Math.abs(Math.round(metric * 10)) % items.length;
   return items[index];
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
