@@ -56,3 +56,51 @@ test('session export and import round-trip', async ({ page }) => {
   await expect(page.getByLabel('Story title')).toHaveValue(/Pip Lantern/);
   await expect(page.getByLabel('Story text')).toHaveValue(/Mara/);
 });
+
+function encodeShareHash(snapshot: {
+  schemaVersion: 'share.v1';
+  characterName: string;
+  childName: string;
+  storyTitle: string;
+  storyText: string;
+  subject: string;
+}) {
+  const base64 = Buffer.from(JSON.stringify(snapshot), 'utf-8').toString('base64');
+  return `#share=${encodeURIComponent(base64)}`;
+}
+
+test('opening a shared story link keeps autosaving further edits locally', async ({ page }) => {
+  const hash = encodeShareHash({
+    schemaVersion: 'share.v1',
+    characterName: 'Pip Lantern',
+    childName: 'Mara',
+    storyTitle: 'Pip Lantern and the Bridge of Goodnight',
+    storyText: 'Pip Lantern tiptoed through the moonlight for Mara, who was fast asleep.',
+    subject: 'house and tree',
+  });
+
+  await page.goto(`/${hash}`);
+  await expect(page.getByText(/Shared story loaded\./i)).toBeVisible();
+
+  await page.getByRole('tab', { name: /Story/i }).click();
+  await expect(page.getByLabel('Story title')).toHaveValue(/Pip Lantern/);
+
+  await page.getByRole('tab', { name: /Voice/i }).click();
+  await page.getByRole('button', { name: /Demo voice/i }).click();
+  await expect(page.getByText(/warm and close/i)).toBeVisible();
+
+  // Let the debounced autosave effect flush to IndexedDB.
+  await page.waitForTimeout(700);
+
+  // Reload without the share hash so the app must restore from local storage.
+  // Before the fix, `hasLoaded` was never set to true after a shared story
+  // loaded, so the autosave effect silently never ran and this reload would
+  // come back with a blank session, quietly losing the story and the
+  // just-recorded parent voice profile.
+  await page.goto('/');
+  await page.getByRole('tab', { name: /Story/i }).click();
+  await expect(page.getByLabel('Story title')).toHaveValue(/Pip Lantern/);
+
+  await page.getByRole('tab', { name: /Voice/i }).click();
+  await expect(page.getByText(/warm and close/i)).toBeVisible();
+});
