@@ -109,6 +109,7 @@ export function ProjectWorkspace() {
           }
           applyProject(projectFromShareSnapshot(shared));
           pushToast('Shared story loaded.', 'success');
+          setHasLoaded(true);
           return;
         }
       } catch (error) {
